@@ -3,11 +3,11 @@ package com.yemekhane.controller;
 import com.yemekhane.dto.HolidayDto;
 import com.yemekhane.dto.RefundRecordDto;
 import com.yemekhane.entity.Role;
-import com.yemekhane.entity.User;
 import com.yemekhane.exception.BusinessException;
 import com.yemekhane.service.HolidayService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.yemekhane.security.UserDetailsImpl;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/holidays")
@@ -51,19 +52,37 @@ public class HolidayController {
     @GetMapping("/refunds/user/{userId}")
     public ResponseEntity<List<RefundRecordDto>> getUserRefunds(@PathVariable Long userId, HttpServletRequest request) {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal == null || "anonymousUser".equals(principal)) {
-            throw new BusinessException("Oturum bulunamadı.");
-        }
+        if (principal == null || "anonymousUser".equals(principal)) throw new BusinessException("Oturum bulunamadi.");
         UserDetailsImpl authenticatedUser = (UserDetailsImpl) principal;
         if (authenticatedUser.getRoleEnum() != Role.ADMIN && !authenticatedUser.getId().equals(userId)) {
-            throw new BusinessException("Başka bir kullanıcının iadelerine erişemezsiniz.");
+            throw new BusinessException("Baska bir kullanicinin iadelerine erisemezsiniz.");
         }
         return ResponseEntity.ok(holidayService.getUserRefunds(userId));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/refunds/{id}/mark-refunded")
     public ResponseEntity<Void> markRefunded(@PathVariable Long id) {
         holidayService.markRefunded(id);
         return ResponseEntity.ok().build();
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/refunds/mark-paid")
+    public ResponseEntity<Map<String, Integer>> markRefundsPaid(@RequestBody RefundIdsRequest request) {
+        int updated = holidayService.markRefundsPaid(request.getIds());
+        return ResponseEntity.ok(Map.of("updated", updated));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/refunds/mark-all-paid")
+    public ResponseEntity<Map<String, Integer>> markAllPendingRefunded() {
+        int updated = holidayService.markAllPendingRefunded();
+        return ResponseEntity.ok(Map.of("updated", updated));
+    }
+
+    @Data
+    public static class RefundIdsRequest {
+        private List<Long> ids;
     }
 }
