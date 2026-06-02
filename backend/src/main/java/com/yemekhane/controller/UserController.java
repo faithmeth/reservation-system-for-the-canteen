@@ -68,6 +68,12 @@ public class UserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/register")
+    public ResponseEntity<UserDto> registerUser(@RequestBody UserDto request) {
+        return ResponseEntity.ok(userService.createUser(request));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/batch")
     public ResponseEntity<List<UserDto>> createUsers(@RequestBody List<UserDto> requests) {
         return ResponseEntity.ok(userService.createUsers(requests));
