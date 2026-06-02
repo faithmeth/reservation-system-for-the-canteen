@@ -29,3 +29,13 @@ export const markRefunded = async (id) => {
     const response = await api.put(`/holidays/refunds/${id}/mark-refunded`);
     return response.data;
 };
+
+export const markRefundsPaid = async (ids) => {
+    const response = await api.put('/holidays/refunds/mark-paid', { ids });
+    return response.data;
+};
+
+export const markAllRefundsPaid = async () => {
+    const response = await api.put('/holidays/refunds/mark-all-paid');
+    return response.data;
+};
