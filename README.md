@@ -311,6 +311,12 @@ backend/data/
 ### İstatistik ve Raporlama Mantığı
 
 - Sistemde **"En Çok Rezerve Edilen Menüler"** istatistiği, kullanıcılardan alınan doğrudan puanlamalarla (1-5 yıldız gibi) değil, o günkü menülerin rezervasyon sayısıyla hesaplanmaktadır. İlerleyen geliştirmelerde menülere puanlama sistemi eklenebilir.
+- **Net Ciro (Net Gelir) Hesaplaması:** Sistemdeki net ciro, kullanıcılardan alınan net tutarı ifade eder. Kullanıcılar rezervasyon iptal ettiğinde veya admin tatil ilan ettiğinde iade işlemi başlatılır. Ancak iade edilecek tutar, **gerçekten iade edildi olarak onaylanana kadar** sistemin net cirosundan düşülmez.
+- **İşlem Sıralaması:** "Tüm Rezervasyonlar" ve "Ödeme Geçmişim" listelerindeki tüm veriler (rezervasyonlar, ek ödemeler, iptaller, iadeler) işlem tarihine göre **en yenisi en üstte** (DESC) olacak şekilde sıralanır.
+
+### Performans İyileştirmeleri
+
+- **Veritabanı Optimizasyonu (Backend):** Admin panelindeki istatistikler ve raporlamalar oluşturulurken belleği yoran `findAll()` döngüleri yerine; veritabanı (PostgreSQL/H2) seviyesinde anlık çalışan optimize edilmiş **JPQL aggregations (`SUM`, `COALESCE`)** sorguları kullanılmıştır. Bu sayede devasa verilerde bile frontend'e anında yanıt dönülmesi sağlanmıştır.
 
 ## Üretim Ortamı İçin Öneriler
 
