@@ -23,10 +23,15 @@ const AdminReservations = () => {
         enabled: !!selectedReservation,
     });
 
-    const reservations = reservationsQuery.data ?? [];
-    const refunds = refundsQuery.data ?? [];
+    // Sort descending by date so latest is on top
+    const sortedReservations = [...(reservationsQuery.data ?? [])].sort((a, b) => new Date(b.islemTarihi) - new Date(a.islemTarihi));
+    const sortedRefunds = [...(refundsQuery.data ?? [])].sort((a, b) => new Date(b.islemTarihi) - new Date(a.islemTarihi));
+
     const loading = reservationsQuery.isLoading || refundsQuery.isLoading;
     const menus = menusQuery.data ?? [];
+
+    const reservations = sortedReservations;
+    const refunds = sortedRefunds;
 
     const reservationColumns = [
         { field: 'islemTarihi', header: 'İşlem Tarihi', render: (row) => new Date(row.islemTarihi).toLocaleString('tr-TR') },
@@ -64,15 +69,31 @@ const AdminReservations = () => {
         {
             field: 'status',
             header: 'Durum',
-            render: () => (
-                <span style={{ padding: '0.25rem 0.5rem', background: '#FEF3C7', color: '#92400E', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '600' }}>
-                    İADE EDİLDİ
+            render: (row) => (
+                <span style={{ 
+                    padding: '0.25rem 0.5rem', 
+                    background: row.isRefunded ? '#D1FAE5' : '#FEF3C7', 
+                    color: row.isRefunded ? '#065F46' : '#92400E', 
+                    borderRadius: '4px', 
+                    fontSize: '0.85rem', 
+                    fontWeight: '600' 
+                }}>
+                    {row.isRefunded ? 'İADE YAPILDI' : 'İADE BEKLİYOR'}
                 </span>
             )
         }
     ];
 
     const totalRevenue = reservations.reduce((sum, r) => sum + r.toplamTutar, 0);
+    const allRefundsAmount = refunds.reduce((sum, r) => sum + r.iadeEdilen, 0);
+    const grossRevenue = totalRevenue + allRefundsAmount;
+
+    const totalActualRefunded = refunds
+        .filter(r => r.isRefunded)
+        .reduce((sum, r) => sum + r.iadeEdilen, 0);
+        
+    const netCiro = grossRevenue - totalActualRefunded;
+    
     const holidayRefunds = refunds.filter(r => r.tatilAciklama !== 'Kullanıcı rezervasyon iptali');
     const totalHolidayRefunded = holidayRefunds.reduce((sum, r) => sum + r.iadeEdilen, 0);
     
@@ -117,19 +138,19 @@ const AdminReservations = () => {
                             <DollarSign size={24} />
                         </div>
                         <div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Net Ciro</div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{totalRevenue - totalHolidayRefunded} TL</div>
-                            {totalHolidayRefunded > 0 && (
-                                <div style={{ fontSize: '0.8rem', color: '#EF4444' }}>
-                                    ({totalRevenue} TL rezervasyon - {totalHolidayRefunded} TL resmi tatil iadesi)
-                                </div>
-                            )}
+                             <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Net Ciro</div>
+                             <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{netCiro} TL</div>
+                             {totalActualRefunded > 0 && (
+                                 <div style={{ fontSize: '0.8rem', color: '#EF4444' }}>
+                                     ({grossRevenue} TL rezervasyon - {totalActualRefunded} TL gerçekleşen iade)
+                                 </div>
+                             )}
                         </div>
                     </div>
                 </Card>
             </div>
 
-            {holidayRefunds.length > 0 && (
+            {refunds.some(r => r.tatilAciklama !== 'Kullanıcı rezervasyon iptali') && (
                 <div style={{
                     background: '#FEF3C7',
                     border: '1px solid #F59E0B',

@@ -43,13 +43,20 @@ public class AdminStatisticsService {
         long totalReservations     = reservationRepository.count();
         long thisMonthReservations = reservationRepository.countByYilAndAy(currentYear, currentMonth);
         long todayReservations     = reservationDayRepository.countTodayReservations(today);
-        double totalRevenue        = reservationRepository.sumAllToplamTutar();
-        double totalRefundAmount   = refundRecordRepository.findAll()
-                                          .stream()
-                                          .filter(r -> !"Kullanıcı rezervasyon iptali".equals(r.getTatilAciklama()))
-                                          .mapToDouble(r -> Optional.ofNullable(r.getIadeEdilen()).orElse(0.0))
-                                          .sum();
-        double netRevenue          = totalRevenue - totalRefundAmount;
+        
+        double currentReservationsTutar = reservationRepository.sumAllToplamTutar();
+        
+        // Brüt gelir (Gross Revenue): Mevcut rezervasyon tutarları + Toplam iade edilecek tutar (iptal + tatil)
+        // Çünkü iptal edilen veya tatil olan günlerin parası currentReservationsTutar'dan düşüyor.
+        double allRefundsAmount = refundRecordRepository.sumAllRefundAmount();
+        double totalRevenue = currentReservationsTutar + allRefundsAmount; 
+
+        // Sadece kullanıcının "İade Aldım" diyerek tahsil ettiği tamamlanmış iadeler
+        double totalRefundAmount = refundRecordRepository.sumCompletedRefundAmount();
+
+        // Net gelir: Brüt gelir - Tamamlanmış iadeler
+        double netRevenue = totalRevenue - totalRefundAmount;
+        
         long activeUserCount       = reservationRepository.countDistinctUsers();
         long holidayCount          = holidayRepository.count();
 
@@ -126,24 +133,39 @@ public class AdminStatisticsService {
     public List<MonthlyReservationStatsDto> getMonthlyStats() {
         List<Object[]> rows = reservationRepository.findMonthlyStats();
 
-        // Build refund map: (yil, ay) -> sum of refunds
-        Map<String, Double> refundByMonth = new HashMap<>();
-        refundRecordRepository.findAll().stream()
-            .filter(r -> !"Kullanıcı rezervasyon iptali".equals(r.getTatilAciklama()))
-            .forEach(r -> {
+        // Daha performanslı olması için tüm iptal/iade verisini DB'den gruplu alabiliriz veya tek seferde çekebiliriz.
+        // Şimdilik sadece tek bir findAll ile hallediyoruz ki her ay için ayrı sorgu atmayalım.
+        List<com.yemekhane.entity.RefundRecord> allRefunds = refundRecordRepository.findAll();
+
+        Map<String, Double> allRefundsByMonth = new HashMap<>();
+        Map<String, Double> completedRefundsByMonth = new HashMap<>();
+
+        for (var r : allRefunds) {
             if (r.getTatilTarihi() != null) {
                 String key = r.getTatilTarihi().getYear() + "-" + r.getTatilTarihi().getMonthValue();
-                refundByMonth.merge(key, Optional.ofNullable(r.getIadeEdilen()).orElse(0.0), Double::sum);
+                double amount = Optional.ofNullable(r.getIadeEdilen()).orElse(0.0);
+                
+                // Herhangi bir iade/iptal brüt gelire eklenmeli
+                allRefundsByMonth.merge(key, amount, Double::sum);
+                
+                // Sadece iade edilenler net gelirden düşülmeli
+                if (Boolean.TRUE.equals(r.getIsRefunded())) {
+                    completedRefundsByMonth.merge(key, amount, Double::sum);
+                }
             }
-        });
+        }
 
         return rows.stream()
                 .map(row -> {
                     int year   = ((Number) row[0]).intValue();
                     int month  = ((Number) row[1]).intValue();
                     long count = ((Number) row[2]).longValue();
-                    double rev = ((Number) row[3]).doubleValue();
-                    double ref = refundByMonth.getOrDefault(year + "-" + month, 0.0);
+                    double baseRev = ((Number) row[3]).doubleValue();
+                    
+                    String key = year + "-" + month;
+                    double refundAmt = allRefundsByMonth.getOrDefault(key, 0.0);
+                    double rev = baseRev + refundAmt; // Gross Revenue for this month
+                    double ref = completedRefundsByMonth.getOrDefault(key, 0.0); // Completed Refunds for this month
 
                     String monthName = Month.of(month)
                             .getDisplayName(TextStyle.FULL, new Locale("tr"));
@@ -167,12 +189,12 @@ public class AdminStatisticsService {
     public PaymentSummaryDto getPaymentSummary() {
         long paid    = reservationRepository.countByOdemeDurumu(PaymentStatus.ODENDI);
         long pending = reservationRepository.countByOdemeDurumu(PaymentStatus.BEKLIYOR);
-        double totalRev = reservationRepository.sumAllToplamTutar();
-        double totalRef = refundRecordRepository.findAll()
-                .stream()
-                .filter(r -> !"Kullanıcı rezervasyon iptali".equals(r.getTatilAciklama()))
-                .mapToDouble(r -> Optional.ofNullable(r.getIadeEdilen()).orElse(0.0))
-                .sum();
+        
+        double currentReservationsTutar = reservationRepository.sumAllToplamTutar();
+        double allRefundsAmount = refundRecordRepository.sumAllRefundAmount();
+        double totalRev = currentReservationsTutar + allRefundsAmount; // Gross Revenue
+
+        double totalRef = refundRecordRepository.sumCompletedRefundAmount(); // Completed/Paid Refunds
 
         return PaymentSummaryDto.builder()
                 .paidReservationCount(paid)
@@ -193,7 +215,7 @@ public class AdminStatisticsService {
                 .filter(r -> r.getTatilTarihi() != null && !"Kullanıcı rezervasyon iptali".equals(r.getTatilAciklama()))
                 .count();
         double amount  = allRefunds.stream()
-                .filter(r -> !"Kullanıcı rezervasyon iptali".equals(r.getTatilAciklama()))
+                .filter(r -> Boolean.TRUE.equals(r.getIsRefunded()))
                 .mapToDouble(r -> Optional.ofNullable(r.getIadeEdilen()).orElse(0.0))
                 .sum();
 

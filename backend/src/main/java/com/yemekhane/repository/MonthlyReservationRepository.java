@@ -12,7 +12,11 @@ import java.util.Optional;
 
 public interface MonthlyReservationRepository extends JpaRepository<MonthlyReservation, Long> {
 
-    List<MonthlyReservation> findByUserIdOrderByIslemTarihiDesc(Long userId);
+    @Query("SELECT DISTINCT mr FROM MonthlyReservation mr LEFT JOIN FETCH mr.user LEFT JOIN FETCH mr.reservationDays WHERE mr.user.id = :userId ORDER BY mr.islemTarihi DESC")
+    List<MonthlyReservation> findByUserIdOrderByIslemTarihiDesc(@Param("userId") Long userId);
+
+    @Query("SELECT DISTINCT mr FROM MonthlyReservation mr LEFT JOIN FETCH mr.user LEFT JOIN FETCH mr.reservationDays ORDER BY mr.islemTarihi DESC")
+    List<MonthlyReservation> findAllByOrderByIslemTarihiDesc();
 
     @org.springframework.data.jpa.repository.Modifying
     @Query("DELETE FROM MonthlyReservation e WHERE e.user.id = :userId")
